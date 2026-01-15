@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunch Sync | College Coordinator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .slot-free { @apply bg-green-500 text-white; }
+        .slot-busy { @apply bg-gray-100 text-gray-400; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+
+    <div x-data="lunchApp()" x-init="init()" class="max-w-4xl mx-auto p-4 md:p-8" x-cloak>
+        
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-indigo-600">🍔 Lunch Sync</h1>
+            <p class="text-slate-500">Find the perfect time to eat with the crew.</p>
+        </header>
+
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+                <h2 class="text-xl font-semibold">1. Mark Your Availability</h2>
+                <div class="flex gap-2">
+                    <input type="text" x-model="userName" placeholder="Your Name" class="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none">
+                    <button @click="saveAvailability" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition">Save Me</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th class="p-2">Time</th>
+                            <template x-for="day in days">
+                                <th class="p-2 capitalize" x-text="day"></th>
+                            </template>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="time in timeSlots">
+                            <tr>
+                                <td class="p-2 font-bold border-t" x-text="time"></td>
+                                <template x-for="day in days">
+                                    <td class="p-1 border-t">
+                                        <button 
+                                            @click="toggleSlot(day, time)"
+                                            :class="isSlotSelected(day, time) ? 'bg-green-500 text-white' : 'bg-slate-100'"
+                                            class="w-full py-2 rounded-md transition-colors text-xs font-bold">
+                                            <span x-text="isSlotSelected(day, time) ? 'FREE' : ''"></span>
+                                        </button>
+                                    </td>
+                                </template>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-semibold">2. Group Heatmap</h2>
+                <button @click="clearAll" class="text-red-500 text-sm hover:underline">Reset All Data</button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full table-fixed border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="w-24 p-2"></th>
+                            <template x-for="day in days">
+                                <th class="p-2 capitalize text-sm font-medium" x-text="day"></th>
+                            </template>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="time in timeSlots">
+                            <tr>
+                                <td class="p-2 text-xs font-bold text-slate-500" x-text="time"></td>
+                                <template x-for="day in days">
+                                    <td :style="`background-color: ${getHeatColor(day, time)}`" 
+                                        class="h-12 border border-white relative group cursor-help">
+                                        <div class="hidden group-hover:block absolute z-10 bg-slate-800 text-white text-[10px] p-2 rounded shadow-lg -top-10 left-0 min-w-[100px]">
+                                            Free: <span x-text="getPeopleAt(day, time)"></span>
+                                        </div>
+                                    </td>
+                                </template>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-4 flex items-center gap-4 text-xs text-slate-500">
+                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-slate-100 border"></span> Empty</div>
+                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-green-200"></span> Few</div>
+                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-green-600"></span> Busy</div>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        function lunchApp() {
+            return {
+                userName: '',
+                days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+                timeSlots: ['11:00', '11:30', '12:00', '12:30', '1:00', '1:30', '2:00'],
+                mySelection: [], // Array of "day-time" strings
+                groupData: {}, // { "Name": ["mon-11:00", ...] }
+
+                init() {
+                    const saved = localStorage.getItem('lunch_sync_data');
+                    if (saved) {
+                        this.groupData = JSON.parse(saved);
+                    }
+                },
+
+                toggleSlot(day, time) {
+                    const key = `${day}-${time}`;
+                    if (this.mySelection.includes(key)) {
+                        this.mySelection = this.mySelection.filter(i => i !== key);
+                    } else {
+                        this.mySelection.push(key);
+                    }
+                },
+
+                isSlotSelected(day, time) {
+                    return this.mySelection.includes(`${day}-${time}`);
+                },
+
+                saveAvailability() {
+                    if (!this.userName) return alert('Enter your name first!');
+                    this.groupData[this.userName] = [...this.mySelection];
+                    localStorage.setItem('lunch_sync_data', JSON.stringify(this.groupData));
+                    alert('Saved! Your availability is now in the heatmap.');
+                },
+
+                getPeopleAt(day, time) {
+                    const key = `${day}-${time}`;
+                    const people = Object.keys(this.groupData).filter(name => 
+                        this.groupData[name].includes(key)
+                    );
+                    return people.length > 0 ? people.join(', ') : 'No one yet';
+                },
+
+                getHeatColor(day, time) {
+                    const key = `${day}-${time}`;
+                    const count = Object.keys(this.groupData).filter(name => 
+                        this.groupData[name].includes(key)
+                    ).length;
+                    
+                    const totalPeople = Object.keys(this.groupData).length;
+                    if (totalPeople === 0 || count === 0) return '#f1f5f9'; // slate-100
+                    
+                    const intensity = count / totalPeople;
+                    if (intensity <= 0.33) return '#bbf7d0'; // green-200
+                    if (intensity <= 0.66) return '#4ade80'; // green-400
+                    return '#16a34a'; // green-600
+                },
+
+                clearAll() {
+                    if (confirm('Clear everyone\'s data?')) {
+                        this.groupData = {};
+                        this.mySelection = [];
+                        localStorage.removeItem('lunch_sync_data');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
